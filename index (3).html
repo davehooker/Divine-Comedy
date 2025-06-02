@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Divine Comedy Trail</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #f0f0f0;
+            overflow: hidden;
+        }
+        
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #000;
+            image-rendering: pixelated;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            pointer-events: none;
+        }
+        
+        .ui-panel {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #444;
+            padding: 10px;
+            margin-bottom: 10px;
+            pointer-events: auto;
+            font-size: 14px;
+        }
+        
+        #resources {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .resource {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .resource-bar {
+            width: 100px;
+            height: 20px;
+            border: 1px solid #666;
+            background: #222;
+            position: relative;
+        }
+        
+        .resource-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .health-fill { background: #ff4444; }
+        .virtue-fill { background: #44ff44; }
+        .supplies-fill { background: #4444ff; }
+        .wisdom-fill { background: #ffff44; }
+        
+        #event-log {
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 12px;
+            border-top: 1px solid #444;
+            padding-top: 10px;
+            margin-top: 10px;
+        }
+        
+        .event-message {
+            margin: 2px 0;
+            padding: 2px;
+        }
+        
+        .event-danger { color: #ff6666; }
+        .event-good { color: #66ff66; }
+        .event-info { color: #6666ff; }
+        .event-player { color: #ffff66; }
+        
+        #choice-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(20, 20, 20, 0.95);
+            border: 3px solid #666;
+            padding: 20px;
+            min-width: 300px;
+            display: none;
+        }
+        
+        .choice-button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #333;
+            border: 2px solid #666;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .choice-button:hover {
+            background: #444;
+            border-color: #888;
+            transform: translateX(5px);
+        }
+        
+        #player-list {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #444;
+            padding: 10px;
+            min-width: 150px;
+        }
+        
+        .player-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid;
+        }
+        
+        #chat {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 300px;
+        }
+        
+        #chat-messages {
+            height: 100px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #444;
+            padding: 5px;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        
+        #chat-input {
+            width: 100%;
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 5px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        
+        .location-title {
+            text-align: center;
+            font-size: 24px;
+            color: #ff8844;
+            text-shadow: 2px 2px 4px #000;
+            margin-bottom: 10px;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "@multisynq/client": "https://cdn.jsdelivr.net/npm/@multisynq/client@latest/bundled/multisynq-client.esm.js"
+            }
+        }
+    </script>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="ui-overlay">
+        <div class="ui-panel">
+            <div class="location-title" id="location-name">The Dark Wood</div>
+            <div id="resources">
+                <div class="resource">
+                    <span>Health:</span>
+                    <div class="resource-bar">
+                        <div class="resource-fill health-fill" id="health-bar"></div>
+                    </div>
+                    <span id="health-text">100/100</span>
+                </div>
+                <div class="resource">
+                    <span>Virtue:</span>
+                    <div class="resource-bar">
+                        <div class="resource-fill virtue-fill" id="virtue-bar"></div>
+                    </div>
+                    <span id="virtue-text">50/100</span>
+                </div>
+                <div class="resource">
+                    <span>Supplies:</span>
+                    <div class="resource-bar">
+                        <div class="resource-fill supplies-fill" id="supplies-bar"></div>
+                    </div>
+                    <span id="supplies-text">100/100</span>
+                </div>
+                <div class="resource">
+                    <span>Wisdom:</span>
+                    <div class="resource-bar">
+                        <div class="resource-fill wisdom-fill" id="wisdom-bar"></div>
+                    </div>
+                    <span id="wisdom-text">0/100</span>
+                </div>
+            </div>
+            <div id="event-log"></div>
+        </div>
+    </div>
+    
+    <div id="choice-panel">
+        <h3 id="choice-title">A Fork in the Path</h3>
+        <p id="choice-description">Choose your path wisely...</p>
+        <div id="choice-options"></div>
+    </div>
+    
+    <div id="player-list">
+        <h4>Fellow Travelers</h4>
+        <div id="players"></div>
+    </div>
+    
+    <div id="chat">
+        <div id="chat-messages"></div>
+        <input type="text" id="chat-input" placeholder="Press Enter to chat..." />
+    </div>
+
+    <script type="module">
+        import * as Multisynq from "@multisynq/client";
+        // Game Constants
+        const C = Multisynq.Constants;
+        C.MOVE_SPEED = 2;
+        C.LOCATIONS = [
+            // Hell
+            { name: "The Dark Wood", realm: "Earth", danger: 0.1 },
+            { name: "Gate of Hell", realm: "Hell", danger: 0.3 },
+            { name: "Limbo", realm: "Hell", danger: 0.2 },
+            { name: "Circle of Lust", realm: "Hell", danger: 0.4 },
+            { name: "Circle of Gluttony", realm: "Hell", danger: 0.5 },
+            { name: "Circle of Greed", realm: "Hell", danger: 0.6 },
+            { name: "Circle of Wrath", realm: "Hell", danger: 0.7 },
+            { name: "City of Dis", realm: "Hell", danger: 0.8 },
+            { name: "Circle of Violence", realm: "Hell", danger: 0.9 },
+            { name: "Frozen Lake", realm: "Hell", danger: 1.0 },
+            // Purgatory
+            { name: "Shore of Purgatory", realm: "Purgatory", danger: 0.3 },
+            { name: "Ante-Purgatory", realm: "Purgatory", danger: 0.4 },
+            { name: "Terrace of Pride", realm: "Purgatory", danger: 0.5 },
+            { name: "Terrace of Envy", realm: "Purgatory", danger: 0.4 },
+            { name: "Terrace of Wrath", realm: "Purgatory", danger: 0.4 },
+            { name: "Terrace of Sloth", realm: "Purgatory", danger: 0.3 },
+            { name: "Terrace of Avarice", realm: "Purgatory", danger: 0.3 },
+            { name: "Terrace of Gluttony", realm: "Purgatory", danger: 0.2 },
+            { name: "Terrace of Lust", realm: "Purgatory", danger: 0.2 },
+            { name: "Earthly Paradise", realm: "Purgatory", danger: 0.1 },
+            // Paradise
+            { name: "Sphere of the Moon", realm: "Paradise", danger: 0.0 },
+            { name: "Sphere of Mercury", realm: "Paradise", danger: 0.0 },
+            { name: "Sphere of Venus", realm: "Paradise", danger: 0.0 },
+            { name: "Sphere of the Sun", realm: "Paradise", danger: 0.0 },
+            { name: "Sphere of Mars", realm: "Paradise", danger: 0.0 },
+            { name: "Sphere of Jupiter", realm: "Paradise", danger: 0.0 },
+            { name: "Sphere of Saturn", realm: "Paradise", danger: 0.0 },
+            { name: "Sphere of Fixed Stars", realm: "Paradise", danger: 0.0 },
+            { name: "Primum Mobile", realm: "Paradise", danger: 0.0 },
+            { name: "The Empyrean", realm: "Paradise", danger: 0.0 }
+        ];
+
+        // Divine Comedy Trail Game Model
+        class DivineTrailGame extends Multisynq.Model {
+            init() {
+                this.players = new Map();
+                this.currentLocation = 0;
+                this.journeyProgress = 0;
+                this.activeEvent = null;
+                this.eventLog = [];
+                this.chatMessages = [];
+                
+                this.subscribe(this.sessionId, "view-join", this.onPlayerJoin);
+                this.subscribe(this.sessionId, "view-exit", this.onPlayerLeave);
+                this.subscribe(this.sessionId, "player-action", this.onPlayerAction);
+                this.subscribe(this.sessionId, "chat-message", this.onChatMessage);
+                
+                this.future(5000).checkRandomEvent();
+                this.future(1000).updateJourney();
+                
+                // Initial message
+                this.addEventLog("The journey begins in the Dark Wood...", 'info');
+            }
+            
+            onPlayerJoin({ viewId }) {
+                const color = `hsl(${Math.random() * 360}, 70%, 60%)`;
+                const player = {
+                    id: viewId,
+                    name: `Traveler ${this.players.size + 1}`,
+                    color: color,
+                    health: 100,
+                    virtue: 50,
+                    supplies: 100,
+                    wisdom: 0,
+                    x: 100 + Math.random() * 50,
+                    y: 250 + Math.random() * 100,
+                    targetX: 150,
+                    targetY: 300
+                };
+                
+                this.players.set(viewId, player);
+                this.addEventLog(`${player.name} has joined the journey`, 'player');
+                this.publish(this.sessionId, "players-updated", Array.from(this.players.values()));
+            }
+            
+            onPlayerLeave({ viewId }) {
+                const player = this.players.get(viewId);
+                if (player) {
+                    this.addEventLog(`${player.name} has left the journey`, 'player');
+                    this.players.delete(viewId);
+                    this.publish(this.sessionId, "players-updated", Array.from(this.players.values()));
+                }
+            }
+            
+            onPlayerAction({ playerId, action, data }) {
+                const player = this.players.get(playerId);
+                if (!player) return;
+                
+                switch (action) {
+                    case 'move':
+                        player.targetX = Math.max(0, Math.min(800, data.x));
+                        player.targetY = Math.max(200, Math.min(500, data.y));
+                        break;
+                        
+                    case 'choice':
+                        if (this.activeEvent) {
+                            this.resolveChoice(player, data.choiceIndex);
+                        }
+                        break;
+                }
+            }
+            
+            onChatMessage({ playerId, message }) {
+                const player = this.players.get(playerId);
+                if (!player || !message.trim()) return;
+                
+                const chatMsg = {
+                    player: player.name,
+                    color: player.color,
+                    message: message.trim().substring(0, 100),
+                    timestamp: this.now()
+                };
+                
+                this.chatMessages.push(chatMsg);
+                if (this.chatMessages.length > 50) {
+                    this.chatMessages.shift();
+                }
+                
+                this.publish(this.sessionId, "chat-update", chatMsg);
+            }
+            
+            updateJourney() {
+                // Move all players towards their targets
+                for (const player of this.players.values()) {
+                    const dx = player.targetX - player.x;
+                    const dy = player.targetY - player.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist > C.MOVE_SPEED) {
+                        player.x += (dx / dist) * C.MOVE_SPEED;
+                        player.y += (dy / dist) * C.MOVE_SPEED;
+                    }
+                    
+                    // Consume supplies
+                    if (Math.random() < 0.1) {
+                        player.supplies = Math.max(0, player.supplies - 1);
+                        if (player.supplies === 0) {
+                            player.health = Math.max(0, player.health - 2);
+                        }
+                    }
+                    
+                    // Random health/virtue changes based on location danger
+                    const location = C.LOCATIONS[this.currentLocation];
+                    if (Math.random() < location.danger * 0.1) {
+                        player.health = Math.max(0, player.health - Math.random() * 5);
+                    }
+                }
+                
+                // Progress journey
+                this.journeyProgress += 0.5;
+                if (this.journeyProgress >= 100 && this.currentLocation < C.LOCATIONS.length - 1) {
+                    this.currentLocation++;
+                    this.journeyProgress = 0;
+                    const newLocation = C.LOCATIONS[this.currentLocation];
+                    this.addEventLog(`The party has reached ${newLocation.name}!`, 'info');
+                    this.publish(this.sessionId, "location-changed", this.currentLocation);
+                    
+                    // Reset player positions for new location
+                    for (const player of this.players.values()) {
+                        player.x = 100 + Math.random() * 50;
+                        player.targetX = player.x;
+                    }
+                }
+                
+                this.publish(this.sessionId, "game-state-update", {
+                    players: Array.from(this.players.values()),
+                    location: this.currentLocation,
+                    progress: this.journeyProgress
+                });
+                
+                this.future(100).updateJourney();
+            }
+            
+            checkRandomEvent() {
+                if (!this.activeEvent && this.players.size > 0 && Math.random() < 0.3) {
+                    const location = C.LOCATIONS[this.currentLocation];
+                    const eventType = this.generateEvent(location);
+                    
+                    if (eventType) {
+                        this.activeEvent = eventType;
+                        this.publish(this.sessionId, "event-triggered", eventType);
+                    }
+                }
+                
+                this.future(10000).checkRandomEvent();
+            }
+            
+            generateEvent(location) {
+                const events = {
+                    Hell: [
+                        {
+                            title: "A Demon Blocks Your Path",
+                            description: "A fearsome demon demands tribute. What do you do?",
+                            choices: [
+                                { text: "Fight the demon", effects: { health: -20, virtue: 10, wisdom: 5 } },
+                                { text: "Offer supplies", effects: { supplies: -20, virtue: 5 } },
+                                { text: "Try to reason", effects: { wisdom: 10, virtue: 15 } },
+                                { text: "Run away", effects: { health: -5, virtue: -10 } }
+                            ]
+                        },
+                        {
+                            title: "River of Fire",
+                            description: "The path crosses a river of boiling blood. How do you proceed?",
+                            choices: [
+                                { text: "Wade through quickly", effects: { health: -30, wisdom: 5 } },
+                                { text: "Search for a bridge", effects: { supplies: -10, wisdom: 10 } },
+                                { text: "Build a raft", effects: { supplies: -15, wisdom: 15 } }
+                            ]
+                        }
+                    ],
+                    Purgatory: [
+                        {
+                            title: "A Penitent Soul",
+                            description: "A soul asks for your prayers. Will you help?",
+                            choices: [
+                                { text: "Pray for the soul", effects: { virtue: 20, wisdom: 10 } },
+                                { text: "Share your supplies", effects: { supplies: -15, virtue: 25 } },
+                                { text: "Continue on", effects: { virtue: -5 } }
+                            ]
+                        },
+                        {
+                            title: "The Cleansing Fire",
+                            description: "You must pass through purifying flames.",
+                            choices: [
+                                { text: "Embrace the purification", effects: { health: -15, virtue: 30, wisdom: 15 } },
+                                { text: "Shield yourself", effects: { health: -5, virtue: 10 } },
+                                { text: "Find another path", effects: { supplies: -10, virtue: 5 } }
+                            ]
+                        }
+                    ],
+                    Paradise: [
+                        {
+                            title: "Divine Light",
+                            description: "A brilliant light fills you with understanding.",
+                            choices: [
+                                { text: "Meditate on the light", effects: { wisdom: 30, virtue: 20 } },
+                                { text: "Share the vision", effects: { wisdom: 20, virtue: 15, health: 10 } },
+                                { text: "Continue humbly", effects: { virtue: 25 } }
+                            ]
+                        },
+                        {
+                            title: "Angelic Guide",
+                            description: "An angel offers to restore your party.",
+                            choices: [
+                                { text: "Accept the blessing", effects: { health: 50, virtue: 20, supplies: 30 } },
+                                { text: "Ask for wisdom instead", effects: { wisdom: 50, virtue: 30 } },
+                                { text: "Thank them and continue", effects: { virtue: 40 } }
+                            ]
+                        }
+                    ],
+                    Earth: [
+                        {
+                            title: "Lost in the Dark Wood",
+                            description: "You've strayed from the true path. Which way do you go?",
+                            choices: [
+                                { text: "Follow the faint light", effects: { wisdom: 10, virtue: 5 } },
+                                { text: "Trust your instincts", effects: { health: -10, wisdom: 15 } },
+                                { text: "Call for help", effects: { virtue: 10, supplies: -5 } }
+                            ]
+                        }
+                    ]
+                };
+                
+                const realmEvents = events[location.realm] || events.Earth;
+                return realmEvents[Math.floor(Math.random() * realmEvents.length)];
+            }
+            
+            resolveChoice(player, choiceIndex) {
+                if (!this.activeEvent || choiceIndex >= this.activeEvent.choices.length) return;
+                
+                const choice = this.activeEvent.choices[choiceIndex];
+                const effects = choice.effects;
+                
+                // Apply effects
+                for (const [stat, change] of Object.entries(effects)) {
+                    player[stat] = Math.max(0, Math.min(100, player[stat] + change));
+                }
+                
+                this.addEventLog(
+                    `${player.name} chose: ${choice.text}`,
+                    effects.health && effects.health < 0 ? 'danger' : 'good'
+                );
+                
+                this.activeEvent = null;
+                this.publish(this.sessionId, "event-resolved");
+            }
+            
+            addEventLog(message, type = 'info') {
+                this.eventLog.push({ message, type, timestamp: this.now() });
+                if (this.eventLog.length > 20) {
+                    this.eventLog.shift();
+                }
+                this.publish(this.sessionId, "event-log-update", { message, type });
+            }
+        }
+        DivineTrailGame.register("DivineTrailGame");
+
+        // View Class
+        class DivineTrailView extends Multisynq.View {
+            constructor(model) {
+                super(model);
+                this.model = model;
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.myPlayer = null;
+                
+                this.setupUI();
+                this.setupEventHandlers();
+                
+                // Subscribe to model events
+                this.subscribe(this.sessionId, "players-updated", this.onPlayersUpdated);
+                this.subscribe(this.sessionId, "game-state-update", this.onGameStateUpdate);
+                this.subscribe(this.sessionId, "event-triggered", this.onEventTriggered);
+                this.subscribe(this.sessionId, "event-resolved", this.onEventResolved);
+                this.subscribe(this.sessionId, "event-log-update", this.onEventLogUpdate);
+                this.subscribe(this.sessionId, "location-changed", this.onLocationChanged);
+                this.subscribe(this.sessionId, "chat-update", this.onChatUpdate);
+            }
+            
+            setupUI() {
+                // Canvas click handler
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    this.publish(this.sessionId, "player-action", {
+                        playerId: this.viewId,
+                        action: 'move',
+                        data: { x, y }
+                    });
+                });
+                
+                // Chat input
+                const chatInput = document.getElementById('chat-input');
+                chatInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && chatInput.value.trim()) {
+                        this.publish(this.sessionId, "chat-message", {
+                            playerId: this.viewId,
+                            message: chatInput.value
+                        });
+                        chatInput.value = '';
+                    }
+                });
+                
+                // Choice buttons handler is set up dynamically
+            }
+            
+            setupEventHandlers() {
+                // Find my player
+                for (const player of this.model.players.values()) {
+                    if (player.id === this.viewId) {
+                        this.myPlayer = player;
+                        break;
+                    }
+                }
+            }
+            
+            onPlayersUpdated(players) {
+                // Update player list UI
+                const playersDiv = document.getElementById('players');
+                playersDiv.innerHTML = '';
+                
+                players.forEach(player => {
+                    const div = document.createElement('div');
+                    div.className = 'player-entry';
+                    div.style.borderColor = player.color;
+                    div.textContent = `${player.name}`;
+                    playersDiv.appendChild(div);
+                    
+                    if (player.id === this.viewId) {
+                        this.myPlayer = player;
+                    }
+                });
+                
+                // Update location display
+                const location = C.LOCATIONS[this.model.currentLocation];
+                document.getElementById('location-name').textContent = location.name;
+            }
+            
+            onGameStateUpdate(state) {
+                // Update resource bars
+                const player = state.players.find(p => p.id === this.viewId);
+                if (player) {
+                    this.myPlayer = player;
+                    this.updateResourceBar('health', player.health);
+                    this.updateResourceBar('virtue', player.virtue);
+                    this.updateResourceBar('supplies', player.supplies);
+                    this.updateResourceBar('wisdom', player.wisdom);
+                }
+            }
+            
+            updateResourceBar(resource, value) {
+                const bar = document.getElementById(`${resource}-bar`);
+                const text = document.getElementById(`${resource}-text`);
+                if (bar && text) {
+                    bar.style.width = `${value}%`;
+                    text.textContent = `${Math.floor(value)}/100`;
+                }
+            }
+            
+            onEventTriggered(event) {
+                const panel = document.getElementById('choice-panel');
+                const title = document.getElementById('choice-title');
+                const description = document.getElementById('choice-description');
+                const options = document.getElementById('choice-options');
+                
+                title.textContent = event.title;
+                description.textContent = event.description;
+                options.innerHTML = '';
+                
+                event.choices.forEach((choice, index) => {
+                    const button = document.createElement('button');
+                    button.className = 'choice-button';
+                    button.textContent = choice.text;
+                    button.onclick = () => {
+                        this.publish(this.sessionId, "player-action", {
+                            playerId: this.viewId,
+                            action: 'choice',
+                            data: { choiceIndex: index }
+                        });
+                    };
+                    options.appendChild(button);
+                });
+                
+                panel.style.display = 'block';
+            }
+            
+            onEventResolved() {
+                document.getElementById('choice-panel').style.display = 'none';
+            }
+            
+            onEventLogUpdate({ message, type }) {
+                const log = document.getElementById('event-log');
+                const div = document.createElement('div');
+                div.className = `event-message event-${type}`;
+                div.textContent = message;
+                log.appendChild(div);
+                log.scrollTop = log.scrollHeight;
+                
+                // Remove old messages
+                while (log.children.length > 10) {
+                    log.removeChild(log.firstChild);
+                }
+            }
+            
+            onLocationChanged(locationIndex) {
+                const location = C.LOCATIONS[locationIndex];
+                document.getElementById('location-name').textContent = location.name;
+            }
+            
+            onChatUpdate(chatMsg) {
+                const messages = document.getElementById('chat-messages');
+                const div = document.createElement('div');
+                div.innerHTML = `<span style="color: ${chatMsg.color}">${chatMsg.player}:</span> ${chatMsg.message}`;
+                messages.appendChild(div);
+                messages.scrollTop = messages.scrollHeight;
+                
+                // Remove old messages
+                while (messages.children.length > 20) {
+                    messages.removeChild(messages.firstChild);
+                }
+            }
+            
+            update() {
+                this.render();
+            }
+            
+            render() {
+                const ctx = this.ctx;
+                const location = C.LOCATIONS[this.model.currentLocation];
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, 800, 600);
+                
+                // Draw background based on realm
+                this.drawBackground(location.realm);
+                
+                // Draw path
+                ctx.strokeStyle = '#444';
+                ctx.lineWidth = 40;
+                ctx.beginPath();
+                ctx.moveTo(0, 300);
+                ctx.lineTo(800, 300);
+                ctx.stroke();
+                
+                // Draw progress
+                const progressX = (this.model.journeyProgress / 100) * 800;
+                ctx.fillStyle = '#666';
+                ctx.fillRect(progressX - 2, 280, 4, 40);
+                
+                // Draw players
+                for (const player of this.model.players.values()) {
+                    this.drawPlayer(player);
+                }
+                
+                // Draw location marker
+                ctx.fillStyle = '#ff8844';
+                ctx.font = '16px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('▼', progressX, 260);
+            }
+            
+            drawBackground(realm) {
+                const ctx = this.ctx;
+                
+                switch (realm) {
+                    case 'Hell':
+                        // Red/orange gradient
+                        const hellGradient = ctx.createLinearGradient(0, 0, 0, 600);
+                        hellGradient.addColorStop(0, '#220000');
+                        hellGradient.addColorStop(1, '#660000');
+                        ctx.fillStyle = hellGradient;
+                        ctx.fillRect(0, 0, 800, 600);
+                        
+                        // Fire effects
+                        ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+                        for (let i = 0; i < 20; i++) {
+                            const x = Math.random() * 800;
+                            const y = 400 + Math.random() * 200;
+                            const r = 20 + Math.random() * 30;
+                            ctx.beginPath();
+                            ctx.arc(x, y, r, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                        break;
+                        
+                    case 'Purgatory':
+                        // Grey/blue gradient
+                        const purgGradient = ctx.createLinearGradient(0, 0, 0, 600);
+                        purgGradient.addColorStop(0, '#334455');
+                        purgGradient.addColorStop(1, '#223344');
+                        ctx.fillStyle = purgGradient;
+                        ctx.fillRect(0, 0, 800, 600);
+                        
+                        // Mountain silhouette
+                        ctx.fillStyle = '#111';
+                        ctx.beginPath();
+                        ctx.moveTo(200, 600);
+                        ctx.lineTo(400, 200);
+                        ctx.lineTo(600, 600);
+                        ctx.fill();
+                        break;
+                        
+                    case 'Paradise':
+                        // Light blue/white gradient
+                        const paraGradient = ctx.createLinearGradient(0, 0, 0, 600);
+                        paraGradient.addColorStop(0, '#ffffff');
+                        paraGradient.addColorStop(1, '#87ceeb');
+                        ctx.fillStyle = paraGradient;
+                        ctx.fillRect(0, 0, 800, 600);
+                        
+                        // Light rays
+                        ctx.strokeStyle = 'rgba(255, 255, 200, 0.3)';
+                        ctx.lineWidth = 2;
+                        for (let i = 0; i < 10; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(400, 0);
+                            ctx.lineTo(100 + i * 60, 600);
+                            ctx.stroke();
+                        }
+                        break;
+                        
+                    default:
+                        // Dark forest
+                        ctx.fillStyle = '#0a0a0a';
+                        ctx.fillRect(0, 0, 800, 600);
+                        
+                        // Trees
+                        ctx.fillStyle = '#111';
+                        for (let i = 0; i < 30; i++) {
+                            const x = Math.random() * 800;
+                            const y = Math.random() * 200;
+                            const w = 20 + Math.random() * 40;
+                            const h = 100 + Math.random() * 200;
+                            ctx.fillRect(x - w/2, y, w, h);
+                        }
+                }
+            }
+            
+            drawPlayer(player) {
+                const ctx = this.ctx;
+                
+                // Draw player circle
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw health bar above player
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(player.x - 20, player.y - 25, 40, 4);
+                ctx.fillStyle = '#ff4444';
+                ctx.fillRect(player.x - 20, player.y - 25, (player.health / 100) * 40, 4);
+                
+                // Draw name
+                ctx.fillStyle = 'white';
+                ctx.font = '10px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText(player.name, player.x, player.y - 30);
+                
+                // Highlight my player
+                if (player.id === this.viewId) {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Initialize Multisynq
+        Multisynq.App.makeWidgetDock();
+        
+        try {
+            await Multisynq.Session.join({
+                apiKey: '2C5dNrZdnyx0LOHnVLDm3dszGJrufqxo3Px6DZ0T2u',
+                appId: 'io.multisynq.divine-comedy-trail',
+                model: DivineTrailGame,
+                view: DivineTrailView,
+                viewData: {},
+                tps: 20
+            });
+        } catch (error) {
+            console.error("Failed to join session:", error);
+        }
+        
+        // Move the dock to top-right after it's created
+        setTimeout(() => {
+            const dock = document.querySelector('#croquet_dock, #multisynq_dock, [id*="dock"]');
+            if (dock) {
+                dock.style.position = 'fixed';
+                dock.style.top = '10px';
+                dock.style.right = '10px';
+                dock.style.left = 'auto';
+                dock.style.bottom = 'auto';
+            }
+        }, 100);
+    </script>
+</body>
+</html>
